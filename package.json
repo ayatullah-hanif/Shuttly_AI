@@ -1,0 +1,32 @@
+{
+  "name": "shuttly-ai",
+  "version": "1.0.0",
+  "description": "Llama-powered WhatsApp transport CRM agent",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "test": "node tests/conversation_tests.js"
+  },
+  "keywords": ["whatsapp", "llama", "transport", "crm"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "@supabase/supabase-js": "^2.39.0",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+
+"scripts": {
+  "start": "node server/index.js",
+  "dev": "nodemon server/index.js",
+  "test": "node tests/conversation_tests.js"
+}
