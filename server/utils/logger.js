@@ -2,10 +2,19 @@
 const fs = require('fs');
 const path = require('path');
 
-// Create logs directory if it doesn't exist
+// Check if running in serverless environment
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+// Create logs directory if it doesn't exist (only in non-serverless environments)
 const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+if (!isServerless) {
+  try {
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+  } catch (err) {
+    console.log('Cannot create logs directory in serverless environment');
+  }
 }
 
 // Log levels
@@ -21,8 +30,12 @@ function getTimestamp() {
   return new Date().toISOString();
 }
 
-// Write to log file
+// Write to log file (skip in serverless)
 function writeToFile(level, message, metadata = {}) {
+  if (isServerless) {
+    return; // Skip file logging in serverless
+  }
+  
   const logEntry = {
     timestamp: getTimestamp(),
     level,
@@ -74,7 +87,7 @@ const logger = {
   },
   
   debug: (message, metadata = {}) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' || process.env.DEBUG) {
       writeToFile(LOG_LEVELS.DEBUG, message, metadata);
       consoleLog(LOG_LEVELS.DEBUG, message, metadata);
     }
@@ -90,10 +103,6 @@ const logger = {
     };
     
     logger.info(`WhatsApp ${direction}`, metadata);
-    writeToFile(LOG_LEVELS.INFO, `WhatsApp ${direction}`, {
-      ...metadata,
-      messageSample: message ? message.substring(0, 50) : '' // Only log first 50 chars
-    });
   },
   
   // Log tool calls
