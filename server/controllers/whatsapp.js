@@ -5,6 +5,13 @@ const { hashPhoneNumber } = require('../utils/privacy');
 const { handleConversation } = require('../services/llama');
 const { executeTool } = require('./tools');
 const logger = require('../utils/logger');
+const {
+  getWelcomeButtons,
+  getCityList,
+  getBusStopsList,
+  isButtonReply,
+  parseInteractiveReply
+} = require('../utils/interactive-responses');
 
 const WHATSAPP_API_URL = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
@@ -219,7 +226,7 @@ async function handleWebhook(req, res) {
     const message = parseIncomingMessage(req.body);
 
     if (!message) {
-      return res.sendStatus(200); // Acknowledge but don't process
+      return res.sendStatus(200); 
     }
 
     logger.whatsapp(hashPhoneNumber(message.from), 'incoming', message.text || message.type);
@@ -249,8 +256,74 @@ async function handleWebhook(req, res) {
       return res.sendStatus(200);
     }
 
-    // Handle text messages with Llama
-    const userMessage = message.text || 'Hello';
+  // Handle interactive button/list replies
+    let userMessage = message.text || 'Hello';
+    let interactiveReply = null;
+  
+    if (isButtonReply(message)) {
+      interactiveReply = parseInteractiveReply(message);
+      userMessage = interactiveReply.title; // Use the button text as message
+  
+      logger.info('Interactive reply received', {
+        type: interactiveReply.type,
+        id: interactiveReply.id
+      });
+    }
+  
+    // Handle button actions directly
+    if (interactiveReply) {
+      const buttonId = interactiveReply.id;
+  
+      // Check price button
+      if (buttonId === 'check_price') {
+        const citiesResult = await executeTool('getCities', {}, user.id);
+        if (citiesResult.success) {
+          const cityList = getCityList(citiesResult.cities);
+          await sendListMenu(message.from, cityList.bodyText, cityList.buttonText, cityList.sections);
+          return res.sendStatus(200);
+        }
+      }
+  
+      // City selected - show bus stops
+      if (buttonId.startsWith('city_')) {
+        const cityId = buttonId.split('_')[1];
+        // Get city name from database
+        const { data: cities } = await query('cities', 'select', {
+          where: { id: cityId }
+        });
+  
+        if (cities && cities.length > 0) {
+          const cityName = cities[0].name;
+          const stopsResult = await executeTool('getBusStops', { city_name: cityName }, user.id);
+  
+          if (stopsResult.success) {
+            const stopsList = getBusStopsList(cityName, stopsResult.stops, 'origin');
+            await sendListMenu(message.from, stopsList.bodyText, stopsList.buttonText, stopsList.sections);
+            return res.sendStatus(200);
+          }
+        }
+      }
+  
+      // Bus status button
+      if (buttonId === 'bus_status') {
+        await sendWhatsAppMessage(message.from, 'Which bus stop would you like to check?\n\nPlease type the stop name (e.g., "Maryland" or "Ojota")');
+        return res.sendStatus(200);
+      }
+  
+      // Complaint button
+      if (buttonId === 'complaint') {
+        await sendWhatsAppMessage(message.from, '📝 Please tell me about your complaint. What happened?');
+        return res.sendStatus(200);
+      }
+    }
+  
+    // Check for greeting to send welcome buttons
+    const greetings = ['hello', 'hi', 'hey', 'start', 'menu'];
+  if (greetings.some(g => userMessage.toLowerCase().includes(g))) {
+    const welcome = getWelcomeButtons();
+    await sendButtons(message.from, welcome.bodyText, welcome.buttons);
+    return res.sendStatus(200);
+}
     
     // Tool executor for Llama
     const toolExecutor = async (toolName, toolArgs) => {
